@@ -2,43 +2,29 @@ package com.example.fleps.gps;
 
 import android.app.Activity;
 import android.app.ProgressDialog;
-import android.content.Context;
-import android.location.Criteria;
-import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
+import android.content.Intent;
 import android.os.AsyncTask;
-import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
-import android.util.Log;
-import android.view.Menu;
-import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-import org.apache.http.NameValuePair;
+import com.example.fleps.gps.listener.UpdateListener;
+import com.example.fleps.gps.service.LocationService;
+
 import org.apache.http.client.ResponseHandler;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.BasicResponseHandler;
 import org.apache.http.impl.client.DefaultHttpClient;
-import org.apache.http.message.BasicNameValuePair;
-import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 
-
-public class MainActivity extends Activity implements View.OnClickListener, LocationListener{
+public class MainActivity extends Activity implements View.OnClickListener, UpdateListener {
 
     double latitude, longitude;
-    TextView latTW, longTW;
-    Button sendBTN;
+    TextView latTW, longTW, provTW;
+    Button startBTN, stopBTN;
     private ProgressDialog dialog;
     public static final String log = "LOG: ";
     @Override
@@ -47,55 +33,47 @@ public class MainActivity extends Activity implements View.OnClickListener, Loca
         setContentView(R.layout.activity_main);
         latTW = (TextView) findViewById(R.id.lat_tw);
         longTW = (TextView) findViewById(R.id.long_tw);
-        sendBTN = (Button) findViewById(R.id.send_btn);
-        sendBTN.setOnClickListener(this);
-
-        Location location;
-        location = getLocation();
-        onLocationChanged(location);
+        provTW = (TextView) findViewById(R.id.providerTW);
+        startBTN = (Button) findViewById(R.id.start_btn);
+        startBTN.setOnClickListener(this);
+        stopBTN = (Button) findViewById(R.id.stop_btn);
+        stopBTN.setOnClickListener(this);
+        Config.context = this;
+        startService(new Intent(this, LocationService.class));
+        setCoordOnTW();
+        CurrentLocation currentLocation = new CurrentLocation();
+        currentLocation.addListener(this);
     }
 
-    private void setCoordOnTW (Location location) {
-        if (location!=null) {
-            latitude = location.getLatitude();
-            longitude = location.getLongitude();
-            latTW.setText(getString(R.string.latitude) + " " + latitude);
-            longTW.setText(getString(R.string.longitude) + " " + longitude);
+    private void setCoordOnTW () {
+        if (CurrentLocation.getCurrentLocation()!=null) {
+            provTW.setText(getString(R.string.providerTW) + " " + CurrentLocation.getProvider());
+            latTW.setText(getString(R.string.latitude) + " " + CurrentLocation.getCurrentLocation().getLatitude());
+            longTW.setText(getString(R.string.longitude) + " " + CurrentLocation.getCurrentLocation().getLongitude());
         }
-    }
-
-    private Location getLocation(){
-        Location loc;
-        LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-        String provider = LocationManager.NETWORK_PROVIDER;
-        lm.requestLocationUpdates(provider, 1000, 1, this);
-        loc = lm.getLastKnownLocation(provider);
-        return loc;
     }
 
     @Override
     public void onClick(View view) {
-        new RequestTask().execute("http://grope.io/testapp/savecoord.php");
+        //new RequestTask().execute("http://grope.io/testapp/savecoord.php");
+        switch (view.getId()){
+            case R.id.start_btn:
+                startService(new Intent(this, LocationService.class));
+                break;
+            case R.id.stop_btn:
+                stopService(new Intent(this, LocationService.class));
+                break;
+        }
     }
 
     @Override
-    public void onLocationChanged(Location location) {
-        setCoordOnTW(location);
+    public void onPositionChanged() {
+        setCoordOnTW();
     }
 
     @Override
-    public void onStatusChanged(String s, int i, Bundle bundle) {
-
-    }
-
-    @Override
-    public void onProviderEnabled(String s) {
-
-    }
-
-    @Override
-    public void onProviderDisabled(String s) {
-
+    public void onProviderChanged() {
+        setCoordOnTW();
     }
 
     class RequestTask extends AsyncTask<String, String, String> {
@@ -110,6 +88,7 @@ public class MainActivity extends Activity implements View.OnClickListener, Loca
 
                 DefaultHttpClient httpclient = new DefaultHttpClient();
                 HttpPost postMethod = new HttpPost(params[0]);
+
                 StringEntity se = new StringEntity(jsonObject.toString());
                 postMethod.setEntity(se);
                 postMethod.setHeader("Accept", "application/json");

@@ -6,4 +6,7 @@
     <string name="latitude">latitude:</string>
     <string name="longitude">longitude:</string>
     <string name="Send">Send</string>
+    <string name="providerTW">Provider:</string>
+    <string name="start_service">start service</string>
+    <string name="stop_service">stop service</string>
 </resources>
