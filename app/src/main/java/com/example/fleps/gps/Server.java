@@ -7,5 +7,4 @@ import java.net.InetAddress;
  */
 public class Server {
     InetAddress inetAddress;
-
 }

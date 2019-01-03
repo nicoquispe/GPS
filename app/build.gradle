@@ -1,25 +1,42 @@
 apply plugin: 'com.android.application'
 
 android {
-    compileSdkVersion 21
-    buildToolsVersion "22.0.1"
-
+    signingConfigs {
+        config {
+            keyAlias 'key'
+            keyPassword 'Consultora1'
+            storeFile file('C:\\Users\\Nico Quispe\\StudioProjects\\key.jks')
+            storePassword 'Consultora1'
+        }
+    }
+    compileSdkVersion 28
+    buildToolsVersion '28.0.3'
     defaultConfig {
         applicationId "com.example.fleps.gps"
         minSdkVersion 15
-        targetSdkVersion 22
+        targetSdkVersion 28
         versionCode 1
         versionName "1.0"
+        signingConfig signingConfigs.config
     }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.config
         }
+    }
+    productFlavors {
     }
 }
 
 dependencies {
-    compile fileTree(include: ['*.jar'], dir: 'libs')
-    compile 'com.android.support:appcompat-v7:22.2.0'
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation 'com.android.support:appcompat-v7:28.0.0'
+    implementation 'com.google.firebase:firebase-database:16.0.5'
+    implementation 'com.google.firebase:firebase-auth:16.1.0'
+    implementation 'com.google.firebase:firebase-core:16.0.6'
+    implementation 'com.google.firebase:firebase-messaging:17.3.4'
+    implementation 'com.google.android.gms:play-services-location:15.0.1'
 }
+apply plugin: 'com.google.gms.google-services'

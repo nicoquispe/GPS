@@ -1,5 +1,6 @@
 package com.example.fleps.gps;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.location.Criteria;
 import android.location.Location;
@@ -29,6 +30,7 @@ public class CurrentLocation implements Serializable{
         notifyProviderChanged();
     }
 
+    @SuppressLint("MissingPermission")
     private static void updateLocation(){
         LocationManager lm = (LocationManager) Config.context.getSystemService(Context.LOCATION_SERVICE);
         initBestProvider(lm);

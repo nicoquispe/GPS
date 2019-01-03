@@ -3,7 +3,7 @@ package com.example.fleps.gps.service;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.widget.Toast;
+import android.location.Location;
 
 import com.example.fleps.gps.CurrentLocation;
 
@@ -13,10 +13,9 @@ import com.example.fleps.gps.CurrentLocation;
 public class RepeatingAlarmService extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        Toast.makeText(context,
-                CurrentLocation.getCurrentLocation().getLatitude()
-                        + "\n"
-                        + CurrentLocation.getCurrentLocation().getLongitude()
-                , Toast.LENGTH_LONG).show();
+        Location location = CurrentLocation.getCurrentLocation();
+        if( location != null ) {
+            new LocationTask().execute();
+        }
     }
 }

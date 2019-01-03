@@ -1,9 +1,14 @@
 package com.example.fleps.gps.service;
 
+import android.annotation.SuppressLint;
+import android.app.Activity;
 import android.app.AlarmManager;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.ProgressDialog;
 import android.app.Service;
+import android.content.ClipData;
+import android.content.ClipboardManager;
 import android.content.Context;
 import android.content.Intent;
 import android.location.Criteria;
@@ -11,42 +16,92 @@ import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
-import android.widget.Toast;
+import android.os.SystemClock;
+import android.support.annotation.NonNull;
 
 import com.example.fleps.gps.Config;
 import com.example.fleps.gps.CurrentLocation;
+import com.example.fleps.gps.R;
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.OnCompleteListener;
+import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
+import com.google.firebase.auth.AuthResult;
+import com.google.firebase.iid.FirebaseInstanceId;
+import com.google.firebase.iid.InstanceIdResult;
 
-import org.apache.http.client.ResponseHandler;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.BasicResponseHandler;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.json.JSONObject;
-
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.Inet4Address;
+import java.io.BufferedInputStream;
+import java.io.BufferedReader;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.net.HttpURLConnection;
 import java.net.InetAddress;
+import java.net.URL;
+import java.net.URLEncoder;
+import java.util.HashMap;
+import java.util.TreeMap;
 
 /**
  * Created by Fleps_000 on 07.07.2015.
  */
 public class LocationService extends Service implements LocationListener {
 
-
-    public static final int INTERVAL = 5000; // 2 sec
-    public static final int FIRST_RUN = 5000; // 2 seconds
+    public static final int INTERVAL = 1000; // 2 sec
+    public static final int FIRST_RUN = 1000; // 2 seconds
     int REQUEST_CODE = 11223344;
     private LocationManager locationManager;
     AlarmManager alarmManager;
     static int i = 0;
     InetAddress inetAddress;
+    private Task<AuthResult> mytask = null;
+    private FusedLocationProviderClient mFusedLocationClient;
 
+
+    @SuppressLint("MissingPermission")
     @Override
     public void onCreate() {
         super.onCreate();
+        String currentCorreo = "admin@farbis.pe";
+        String currentPassword = "Ricardo1*";
+        mFusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
+        /*
+        FirebaseAuth.getInstance().signInWithEmailAndPassword(
+                currentCorreo, currentPassword).addOnCompleteListener(new OnCompleteListener<AuthResult>() {
+            @Override
+            public void onComplete(@NonNull Task<AuthResult> task) {
+                if (task.isSuccessful()) {
+                    mytask = task;
+                } else {
+                    Log.d(TAG, "Firebase authentication failed");
+                }
+            }
+        });
+        */
+
+        registrar_uuid();
+        if ( Config.context != null ) {
+            if ( Config.context instanceof Activity ) {
+                mFusedLocationClient.getLastLocation()
+                        .addOnSuccessListener((Activity) Config.context, new OnSuccessListener<Location>() {
+                            @Override
+                            public void onSuccess(Location location) {
+                                if (location != null) {
+                                    CurrentLocation.setCurrentLocation(location);
+                                    new LocationTask().execute();
+                                }
+                            }
+                        });
+            }
+        }
+
         Config.context = this;
         locationManager = (LocationManager) this.getSystemService(Context.LOCATION_SERVICE);
         initBestProvider();
@@ -54,7 +109,34 @@ public class LocationService extends Service implements LocationListener {
         locationManager.requestLocationUpdates(CurrentLocation.getProvider(), 1000, 1, this);
         startService();
 
+    }
 
+    private void registrar_uuid() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            String channelId = getString(R.string.default_notification_channel_id);
+            String channelName = getString(R.string.default_notification_channel_name);
+            NotificationManager notificationManager =
+                    getSystemService(NotificationManager.class);
+            assert notificationManager != null;
+            notificationManager.createNotificationChannel(new NotificationChannel(channelId,
+                    channelName, NotificationManager.IMPORTANCE_HIGH));
+        }
+
+        FirebaseInstanceId.getInstance().getInstanceId()
+                .addOnCompleteListener(new OnCompleteListener<InstanceIdResult>() {
+                    @Override
+                    public void onComplete(@NonNull Task<InstanceIdResult> task) {
+                        if (!task.isSuccessful()) {
+                            return;
+                        }
+                        String token = task.getResult().getToken();
+
+						ClipboardManager clipboard = (ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+						ClipData clip = ClipData.newPlainText("label", token);
+						clipboard.setPrimaryClip(clip);
+                        new LoginTask().execute(token);
+                    }
+                });
     }
 
     @Override
@@ -63,12 +145,12 @@ public class LocationService extends Service implements LocationListener {
         if (alarmManager != null) {
             Intent intent = new Intent(this, RepeatingAlarmService.class);
             alarmManager.cancel(PendingIntent.getBroadcast(this, REQUEST_CODE, intent, 0));
-            Toast.makeText(this, "Service Stopped!", Toast.LENGTH_LONG).show();
         }
     }
 
+    @SuppressLint("MissingPermission")
     private void startService() {
-        /*Intent intent = new Intent(this, RepeatingAlarmService.class);
+        Intent intent = new Intent(this, RepeatingAlarmService.class);
         PendingIntent pendingIntent = PendingIntent.getBroadcast(this, REQUEST_CODE, intent, 0);
 
         alarmManager = (AlarmManager) getSystemService(ALARM_SERVICE);
@@ -77,10 +159,11 @@ public class LocationService extends Service implements LocationListener {
                 SystemClock.elapsedRealtime() + FIRST_RUN,
                 INTERVAL,
                 pendingIntent);
-        */
-        Toast.makeText(this, "Service Started.", Toast.LENGTH_LONG).show();
+
+
     }
 
+    @SuppressLint("MissingPermission")
     private void initLocation() {
         CurrentLocation.setCurrentLocation(locationManager.getLastKnownLocation(CurrentLocation.getProvider()));
     }
@@ -100,20 +183,30 @@ public class LocationService extends Service implements LocationListener {
     }
 
     @Override
-    public void onLocationChanged(Location location) {
+    public void onLocationChanged(final Location location) {
         i++;
         CurrentLocation.setCurrentLocation(location);
-        Toast.makeText(this, "Provider: "
-                + CurrentLocation.getProvider()
-                + "\nLat: "
-                + CurrentLocation.getCurrentLocation().getLatitude()
-                + "\nLong: "
-                + CurrentLocation.getCurrentLocation().getLongitude()
-                + "\nCount: "
-                + i
-                , Toast.LENGTH_LONG).show();
-        new RequestTask().execute("grope.io");
+        new LocationTask().execute();
+        /*
+        if( mytask != null ) {
+            String uuid = mytask.getResult().getUser().getUid();
+
+            final String path = "locations";
+            DatabaseReference ref = FirebaseDatabase.getInstance().getReference(path+"/"+uuid);
+            Log.d(TAG, "Firebase isSuccessful");
+            if (location != null) {
+                HashMap<String, Object> result = new HashMap<>();
+                result.put("lat", CurrentLocation.getCurrentLocation().getLatitude());
+                result.put("lng", CurrentLocation.getCurrentLocation().getLongitude());
+                result.put("sender",uuid);
+                ref.setValue(result);
+                Log.d(TAG, "Firebase location");
+            }
+        }
+        */
     }
+
+
 
     @Override
     public void onStatusChanged(String provider, int status, Bundle extras) {
@@ -130,37 +223,75 @@ public class LocationService extends Service implements LocationListener {
 
     }
 
-    class RequestTask extends AsyncTask<String, String, String> {
+    public void sendPost( TreeMap<String, String> params, String url ) {
+        try{
+            StringBuilder sbParams = new StringBuilder();
+            int i = 0;
+            for (String key : params.keySet()) {
+                try {
+                    if (i != 0){
+                        sbParams.append("&");
+                    }
+                    sbParams.append(key).append("=")
+                            .append(URLEncoder.encode(params.get(key), "UTF-8"));
+
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                }
+                i++;
+            }
+
+            URL urlObj = new URL(url);
+            HttpURLConnection conn = (HttpURLConnection) urlObj.openConnection();
+            conn.setDoOutput(true);
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Accept-Charset", "UTF-8");
+
+            conn.setReadTimeout(5000);
+            conn.setConnectTimeout(5000);
+
+            conn.connect();
+
+            String paramsString = sbParams.toString();
+
+            DataOutputStream wr = new DataOutputStream(conn.getOutputStream());
+            wr.writeBytes(paramsString);
+            wr.flush();
+            wr.close();
+
+            try {
+                InputStream in = new BufferedInputStream(conn.getInputStream());
+                BufferedReader reader = new BufferedReader(new InputStreamReader(in));
+                StringBuilder result = new StringBuilder();
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    result.append(line);
+                }
+
+                //Log.d("test", "result from server: " + result.toString());
+            } catch (IOException e) {
+                e.printStackTrace();
+            } finally {
+                if (conn != null) {
+                    conn.disconnect();
+                }
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+    class LoginTask extends AsyncTask<String, String, String> {
 
         @Override
         protected String doInBackground(String... params) {
-
-            try {
-                JSONObject jsonObject = new JSONObject();
-                jsonObject.put("lat", Double.toString(CurrentLocation.getCurrentLocation().getLatitude()));
-                jsonObject.put("long", Double.toString(CurrentLocation.getCurrentLocation().getLongitude()));
-
-                if(inetAddress==null){
-                    try {
-                        inetAddress = InetAddress.getByName(params[0]);
-                    } catch (Exception e) {
-                        System.out.println("Exp=" + e);
-                    }
-                }
-                if(inetAddress!=null) {
-                    DatagramSocket sock = new DatagramSocket();
-
-                    byte [] buf = (jsonObject.toString()).getBytes();
-
-                    DatagramPacket pack = new DatagramPacket(buf, jsonObject.toString().length(), inetAddress, 12345);
-
-                    sock.send(pack);
-
-                    sock.close();
-                }
-            } catch (Exception e) {
-                System.out.println("Exp=" + e);
-            }
+            HashMap<String, String> map = new HashMap<>();
+            map.put("os", "Android");
+            map.put("email", "admin@farbis.pe");
+            map.put("token", params[0] );
+            map.put("lang", "es");
+            sendPost(new TreeMap<String, String>(map), "https://farbis.pe/agenda/pnfw/register" );
             return null;
         }
 
